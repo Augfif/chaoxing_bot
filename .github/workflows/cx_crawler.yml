@@ -28,27 +28,34 @@ jobs:
         pip install selenium requests
 
     - name: Run Script
-      id: run_script # 给这个步骤一个id，方便后续引用它的状态
-      continue-on-error: true # 【重要】即使脚本失败也继续执行，以便上传产物
+      id: run_script
+      continue-on-error: true
       env:
         CX_USERNAME: ${{ secrets.CX_USERNAME }}
         CX_PASSWORD: ${{ secrets.CX_PASSWORD }}
-        EMAIL_ACCOUNT: ${{ secrets.EMAIL_ACCOUNT }}
-        EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
         WXPUSHER_SPT: ${{ secrets.WXPUSHER_SPT }}
       run: python main.py
 
+    - name: Commit and push history file
+      # 仅当脚本成功时才提交历史记录，防止因错误覆盖掉正确的历史
+      if: steps.run_script.outcome == 'success'
+      run: |
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "github-actions[bot]@users.noreply.github.com"
+        git add history.json
+        # 如果文件没有变化，commit会失败，所以用 || true 来忽略错误
+        git commit -m "Update task history [skip ci]" || echo "No changes to commit"
+        git push
+
     - name: Upload screenshots artifact
-      # 【重要】无论成功失败，都上传截图压缩包
       if: always()
       uses: actions/upload-artifact@v4
       with:
         name: analysis-screenshots
         path: screenshots.zip
-        retention-days: 5 # 保留5天
+        retention-days: 5
 
     - name: Check script result
-      # 【重要】如果脚本失败了，最后让整个job失败
       if: steps.run_script.outcome == 'failure'
       run: |
         echo "Python script failed. Check the logs and artifacts."
