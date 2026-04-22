@@ -3,7 +3,7 @@ import time
 import sys
 import requests
 import smtplib
-import zipfile # 新增：用于打包截图
+import zipfile
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.header import Header
@@ -148,28 +148,36 @@ def main():
         driver.find_element(By.ID, "pwd").send_keys(PASSWORD)
         driver.find_element(By.ID, "loginBtn").click()
 
-        # 等待登录成功后的页面跳转
+        # 等待登录成功后的页面跳转 (已移除多余的 driver.get)
         wait.until(EC.url_contains("i.mooc.chaoxing.com"))
         print("✅ 登录成功！")
-
-        driver.get("https://i.mooc.chaoxing.com/space/index")
 
         # 切换到课程列表 iframe
         wait.until(EC.frame_to_be_available_and_switch_to_it((By.ID, "frame_content")))
 
-        # 等待课程卡片加载
-        course_cards = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "li.course .course-info")))
+        # 等待课程卡片加载 (修正为找 li.course)
+        try:
+            course_cards = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "li.course")))
+        except TimeoutException:
+            # 如果没找到 li.course，尝试原版的备用 XPath
+            course_cards = driver.find_elements(By.XPATH, '//a[contains(@href,"courseid") or contains(@href,"mooc2-ans")]')
+
+        if not course_cards:
+            print("⚠️ 未能在页面上找到任何课程卡片，请检查是否没有课程或页面结构已更改。")
+            save_screenshot_for_analysis(driver, "AllCourses", "not_found")
 
         for card in course_cards:
             try:
                 course_name = card.find_element(By.CSS_SELECTOR, ".course-name").text.strip()
-                course_a_tag = card.find_element(By.CSS_SELECTOR, "a.course-cover")
+                # 修正：找 .course-cover 内部的 a 标签
+                course_a_tag = card.find_element(By.CSS_SELECTOR, ".course-cover a")
                 raw_link = course_a_tag.get_attribute("href")
 
                 if raw_link and "chaoxing.com" in raw_link:
                     all_course_link_list.append({"name": course_name, "url": raw_link})
+
             except Exception as e:
-                print(f"⚠️ 解析某个课程卡片时出错: {e}")
+                print(f"⚠️ 解析某个课程卡片时出错，已跳过: {e}")
                 continue
 
         print(f"✅ 成功获取到 {len(all_course_link_list)} 门课程。")
@@ -246,7 +254,7 @@ def main():
                 for file in os.listdir('.'):
                     if file.endswith('.png'):
                         zf.write(file)
-                        print(f"  - 已添加 {file}")
+                        os.remove(file) # 打包后删除原图，保持工作区整洁
             print("✅ 截图已打包至 screenshots.zip")
         except Exception as e:
             print(f"❌ 打包截图失败: {e}")
