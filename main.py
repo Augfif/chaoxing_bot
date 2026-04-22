@@ -12,6 +12,8 @@ from selenium.webdriver.remote.webdriver import WebDriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+# 新增：精准捕获超时
+from selenium.common.exceptions import TimeoutException
 
 # ===================== 读取环境变量配置 =====================
 USERNAME = os.environ.get("CX_USERNAME")
@@ -102,7 +104,18 @@ def setup_driver() -> WebDriver:
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_experimental_option("excludeSwitches", ["enable-logging"])
     chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+
+    # 【核心优化】禁止加载图片和CSS，大幅提升速度
+    prefs = {
+        "profile.managed_default_content_settings.images": 2,
+        "permissions.default.stylesheet": 2
+    }
+    chrome_options.add_experimental_option("prefs", prefs)
+    chrome_options.add_argument("--blink-settings=imagesEnabled=false")
+
     driver = webdriver.Chrome(options=chrome_options)
+    # 【核心优化】强制页面加载超时30秒
+    driver.set_page_load_timeout(30)
     print("✅ 浏览器驱动初始化完成。")
     return driver
 
@@ -212,7 +225,7 @@ def main():
         print("📸 捕获到异常，正在截取当前页面...")
         driver.save_screenshot("error_screenshot.png")
         print("✅ 截图已保存为 error_screenshot.png")
-        sys.exit(1) # 以失败状态退出
+        sys.exit(1)
 
     finally:
         print("🚪 正在关闭浏览器...")
