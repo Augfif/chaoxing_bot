@@ -11,24 +11,25 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      
+
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
         python-version: '3.10'
-        
-    # 【新增】安装中文字体，解决截图方块乱码问题
+
     - name: Install Chinese Fonts
       run: |
         sudo apt-get update
         sudo apt-get install -y fonts-wqy-zenhei
-        
+
     - name: Install Dependencies
       run: |
         python -m pip install --upgrade pip
         pip install selenium requests
 
     - name: Run Script
+      id: run_script # 给这个步骤一个id，方便后续引用它的状态
+      continue-on-error: true # 【重要】即使脚本失败也继续执行，以便上传产物
       env:
         CX_USERNAME: ${{ secrets.CX_USERNAME }}
         CX_PASSWORD: ${{ secrets.CX_PASSWORD }}
@@ -37,9 +38,18 @@ jobs:
         WXPUSHER_SPT: ${{ secrets.WXPUSHER_SPT }}
       run: python main.py
 
-    - name: Upload artifact on failure
-      if: failure()
+    - name: Upload screenshots artifact
+      # 【重要】无论成功失败，都上传截图压缩包
+      if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: error-screenshot
-        path: error_screenshot.png
+        name: analysis-screenshots
+        path: screenshots.zip
+        retention-days: 5 # 保留5天
+
+    - name: Check script result
+      # 【重要】如果脚本失败了，最后让整个job失败
+      if: steps.run_script.outcome == 'failure'
+      run: |
+        echo "Python script failed. Check the logs and artifacts."
+        exit 1

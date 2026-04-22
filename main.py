@@ -3,6 +3,7 @@ import time
 import sys
 import requests
 import smtplib
+import zipfile # 新增：用于打包截图
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.header import Header
@@ -12,8 +13,7 @@ from selenium.webdriver.remote.webdriver import WebDriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-# 新增：精准捕获超时
-from selenium.common.exceptions import TimeoutException
+from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
 # ===================== 读取环境变量配置 =====================
 USERNAME = os.environ.get("CX_USERNAME")
@@ -75,16 +75,14 @@ def push_to_wx(text):
         print("⚠️ 未配置 WxPusher SPT，跳过微信推送")
         return False
     try:
-        # 【重要修改】根据spt文档，使用极简推送的专用URL
         url = "https://wxpusher.zjiecode.com/api/send/message/simple-push"
         payload = {
             "content": text,
             "summary": "🚨 学习通新任务提醒",
-            "contentType": 2,  # 2表示HTML
-            "spt": WXPUSHER_SPT # 【重要修改】参数名spt
+            "contentType": 2,
+            "spt": WXPUSHER_SPT
         }
         res = requests.post(url, json=payload).json()
-        # 极简推送的成功码是 0
         if str(res.get("code")) == "0":
             print("✅ WxPusher 推送成功！")
             return True
@@ -107,8 +105,8 @@ def setup_driver() -> WebDriver:
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_experimental_option("excludeSwitches", ["enable-logging"])
     chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+    chrome_options.add_argument("window-size=1920,1080") # 设置截图分辨率
 
-    # 【核心优化】禁止加载图片和CSS，大幅提升速度
     prefs = {
         "profile.managed_default_content_settings.images": 2,
         "permissions.default.stylesheet": 2
@@ -117,11 +115,20 @@ def setup_driver() -> WebDriver:
     chrome_options.add_argument("--blink-settings=imagesEnabled=false")
 
     driver = webdriver.Chrome(options=chrome_options)
-    # 【核心优化】强制页面加载超时30秒
     driver.set_page_load_timeout(30)
     print("✅ 浏览器驱动初始化完成。")
     return driver
 
+# ===================== 辅助函数 =====================
+def save_screenshot_for_analysis(driver: WebDriver, course_name: str, task_type: str):
+    """为未找到任务的页面截图"""
+    safe_course_name = "".join(c for c in course_name if c.isalnum())
+    filename = f"analysis_{safe_course_name}_{task_type}.png"
+    try:
+        driver.save_screenshot(filename)
+        print(f"📸 {task_type}页面未找到任何条目，已截图保存为 {filename}")
+    except Exception as e:
+        print(f"❌ 截图失败: {e}")
 
 # ===================== 核心爬虫逻辑 =====================
 def main():
@@ -137,88 +144,85 @@ def main():
     try:
         print("🔄 正在登录学习通...")
         driver.get("https://passport2.chaoxing.com/login?fid=1745")
-
-        phone_input = wait.until(EC.presence_of_element_located((By.ID, "phone")))
-        phone_input.clear()
-        phone_input.send_keys(USERNAME)
-
-        pwd_input = driver.find_element(By.ID, "pwd")
-        pwd_input.clear()
-        pwd_input.send_keys(PASSWORD)
-
+        wait.until(EC.presence_of_element_located((By.ID, "phone"))).send_keys(USERNAME)
+        driver.find_element(By.ID, "pwd").send_keys(PASSWORD)
         driver.find_element(By.ID, "loginBtn").click()
-        time.sleep(5)
+
+        # 等待登录成功后的页面跳转
+        wait.until(EC.url_contains("i.mooc.chaoxing.com"))
         print("✅ 登录成功！")
 
         driver.get("https://i.mooc.chaoxing.com/space/index")
-        time.sleep(4)
 
-        iframe = wait.until(EC.presence_of_element_located((By.ID, "frame_content")))
-        driver.switch_to.frame(iframe)
-        time.sleep(3)
+        # 切换到课程列表 iframe
+        wait.until(EC.frame_to_be_available_and_switch_to_it((By.ID, "frame_content")))
 
-        course_cards = driver.find_elements(By.CSS_SELECTOR, "li.course")
-        if not course_cards:
-            course_cards = driver.find_elements(By.XPATH,
-                                                '//a[contains(@href,"courseid") or contains(@href,"mooc2-ans")]')
+        # 等待课程卡片加载
+        course_cards = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "li.course .course-info")))
 
-        for idx, card in enumerate(course_cards, 1):
+        for card in course_cards:
             try:
                 course_name = card.find_element(By.CSS_SELECTOR, ".course-name").text.strip()
-                course_a_tag = card.find_element(By.CSS_SELECTOR, ".course-cover a")
+                course_a_tag = card.find_element(By.CSS_SELECTOR, "a.course-cover")
                 raw_link = course_a_tag.get_attribute("href")
 
                 if raw_link and "chaoxing.com" in raw_link:
                     all_course_link_list.append({"name": course_name, "url": raw_link})
-                    if "数据库系统原理" in course_name:
-                        break
-            except Exception:
+            except Exception as e:
+                print(f"⚠️ 解析某个课程卡片时出错: {e}")
                 continue
 
+        print(f"✅ 成功获取到 {len(all_course_link_list)} 门课程。")
+
         for index, course in enumerate(all_course_link_list, 1):
+            print(f"\n[{index}/{len(all_course_link_list)}] 正在处理课程: {course['name']}")
             all_tasks_summary[course['name']] = {"作业": [], "考试": []}
             driver.get(course['url'])
-            time.sleep(3)
 
             # 抓取作业
             try:
                 driver.switch_to.default_content()
                 wait.until(EC.element_to_be_clickable((By.XPATH, '//a[@title="作业"]'))).click()
-                time.sleep(2)
-                iframe_zy = wait.until(EC.presence_of_element_located((By.ID, "frame_content-zy")))
-                driver.switch_to.frame(iframe_zy)
-                time.sleep(2)
-                zy_items = driver.find_elements(By.CSS_SELECTOR, ".card-item, .work-item, li")
+                wait.until(EC.frame_to_be_available_and_switch_to_it((By.ID, "frame_content-zy")))
+
+                # 等待至少一个任务项出现，最多等5秒
+                zy_items = WebDriverWait(driver, 5).until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".card-item, .work-item, li")))
                 for item in zy_items:
                     text = item.text.strip()
                     if text: all_tasks_summary[course['name']]["作业"].append(text)
-            except Exception:
-                pass
+                print(f"  - 作业: 找到 {len(all_tasks_summary[course['name']]['作业'])} 项。")
+            except TimeoutException:
+                print("  - 作业: 未在规定时间内找到任何作业项。")
+                save_screenshot_for_analysis(driver, course['name'], "homework")
+            except Exception as e:
+                print(f"  - 作业: 抓取时发生未知错误: {e}")
+                save_screenshot_for_analysis(driver, course['name'], "homework_error")
 
             # 抓取考试
             try:
                 driver.switch_to.default_content()
-                ks_btn = wait.until(EC.element_to_be_clickable((By.XPATH, '//li[@dataname="ks"]//a[@title="考试"]')))
-                ks_btn.click()
-                time.sleep(2)
-                iframe_ks = wait.until(EC.presence_of_element_located((By.ID, "frame_content-ks")))
-                driver.switch_to.frame(iframe_ks)
-                time.sleep(2)
-                ks_items = driver.find_elements(By.CSS_SELECTOR, ".card-item, .work-item, li")
+                wait.until(EC.element_to_be_clickable((By.XPATH, '//li[@dataname="ks"]//a[@title="考试"]'))).click()
+                wait.until(EC.frame_to_be_available_and_switch_to_it((By.ID, "frame_content-ks")))
+
+                # 等待至少一个任务项出现，最多等5秒
+                ks_items = WebDriverWait(driver, 5).until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".card-item, .work-item, li")))
                 for item in ks_items:
                     text = item.text.strip()
                     if text: all_tasks_summary[course['name']]["考试"].append(text)
-            except Exception:
-                pass
+                print(f"  - 考试: 找到 {len(all_tasks_summary[course['name']]['考试'])} 项。")
+            except TimeoutException:
+                print("  - 考试: 未在规定时间内找到任何考试项。")
+                save_screenshot_for_analysis(driver, course['name'], "exam")
+            except Exception as e:
+                print(f"  - 考试: 抓取时发生未知错误: {e}")
+                save_screenshot_for_analysis(driver, course['name'], "exam_error")
 
         print("\n🎉 任务提取完成，准备推送...")
-
-        # 触发推送
         push_content = build_html_message(all_tasks_summary)
         if push_content:
-            pushToEmail = push_to_email(push_content)
-            pushToWx = push_to_wx(push_content)
-            if not pushToEmail and not pushToWx:
+            pushed_email = push_to_email(push_content)
+            pushed_wx = push_to_wx(push_content)
+            if not pushed_email and not pushed_wx:
                 print("⚠️ 未配置或未匹配到推送方式。")
         else:
             print("✅ 当前没有新的待办作业或考试，无需推送。")
@@ -232,8 +236,20 @@ def main():
 
     finally:
         print("🚪 正在关闭浏览器...")
-        driver.quit()
+        if 'driver' in locals() and driver:
+            driver.quit()
         print("✅ 浏览器已关闭。")
+
+        print("📦 正在打包所有截图...")
+        try:
+            with zipfile.ZipFile('screenshots.zip', 'w') as zf:
+                for file in os.listdir('.'):
+                    if file.endswith('.png'):
+                        zf.write(file)
+                        print(f"  - 已添加 {file}")
+            print("✅ 截图已打包至 screenshots.zip")
+        except Exception as e:
+            print(f"❌ 打包截图失败: {e}")
 
 
 if __name__ == "__main__":
