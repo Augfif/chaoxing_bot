@@ -70,19 +70,22 @@ def push_to_email(text):
 
 
 def push_to_wx(text):
+    """使用 WxPusher 的极简推送(spt)发送消息"""
     if not WXPUSHER_SPT:
         print("⚠️ 未配置 WxPusher SPT，跳过微信推送")
         return False
     try:
-        url = "https://wxpusher.zjiecode.com/api/send/message"
+        # 【重要修改】根据spt文档，使用极简推送的专用URL
+        url = "https://wxpusher.zjiecode.com/api/send/message/simple-push"
         payload = {
             "content": text,
             "summary": "🚨 学习通新任务提醒",
             "contentType": 2,  # 2表示HTML
-            "spt": WXPUSHER_SPT
+            "spt": WXPUSHER_SPT # 【重要修改】参数名spt
         }
         res = requests.post(url, json=payload).json()
-        if str(res.get("code")) == "1000":
+        # 极简推送的成功码是 0
+        if str(res.get("code")) == "0":
             print("✅ WxPusher 推送成功！")
             return True
         else:
