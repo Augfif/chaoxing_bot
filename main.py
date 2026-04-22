@@ -1,5 +1,6 @@
 import os
 import time
+import sys
 import requests
 import smtplib
 from email.mime.text import MIMEText
@@ -7,6 +8,7 @@ from email.mime.multipart import MIMEMultipart
 from email.header import Header
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.remote.webdriver import WebDriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -89,12 +91,10 @@ def push_to_wx(text):
         return False
 
 
-# ===================== 核心爬虫逻辑 =====================
-def main():
-    if not USERNAME or not PASSWORD:
-        raise ValueError("❌ 未找到学习通账号密码环境变量！")
-
-    # 云端服务器浏览器无头配置
+# ===================== 浏览器驱动管理 =====================
+def setup_driver() -> WebDriver:
+    """配置并返回一个 Selenium WebDriver 实例"""
+    print("🚀 正在初始化浏览器驱动...")
     chrome_options = Options()
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--disable-gpu")
@@ -102,8 +102,18 @@ def main():
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_experimental_option("excludeSwitches", ["enable-logging"])
     chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-
     driver = webdriver.Chrome(options=chrome_options)
+    print("✅ 浏览器驱动初始化完成。")
+    return driver
+
+
+# ===================== 核心爬虫逻辑 =====================
+def main():
+    if not USERNAME or not PASSWORD:
+        print("❌ 未找到学习通账号密码环境变量！请在 GitHub Secrets 中配置 CX_USERNAME 和 CX_PASSWORD。")
+        sys.exit(1)
+
+    driver = setup_driver()
     wait = WebDriverWait(driver, 15)
     all_course_link_list = []
     all_tasks_summary = {}
@@ -198,11 +208,16 @@ def main():
             print("✅ 当前没有新的待办作业或考试，无需推送。")
 
     except Exception as e:
-        print(f"\n❌ 运行异常：{str(e)}")
+        print(f"\n❌ 运行异常: {e}")
+        print("📸 捕获到异常，正在截取当前页面...")
+        driver.save_screenshot("error_screenshot.png")
+        print("✅ 截图已保存为 error_screenshot.png")
+        sys.exit(1) # 以失败状态退出
 
     finally:
-        print("关闭浏览器...")
+        print("🚪 正在关闭浏览器...")
         driver.quit()
+        print("✅ 浏览器已关闭。")
 
 
 if __name__ == "__main__":
