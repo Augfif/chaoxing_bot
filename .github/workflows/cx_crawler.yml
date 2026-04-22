@@ -10,12 +10,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4   # 👈 升级到 v4
+      uses: actions/checkout@v4
       
     - name: Set up Python
-      uses: actions/setup-python@v5  # 👈 升级到 v5
+      uses: actions/setup-python@v5
       with:
         python-version: '3.10'
+        
+    # 【新增】安装中文字体，解决截图方块乱码问题
+    - name: Install Chinese Fonts
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y fonts-wqy-zenhei
         
     - name: Install Dependencies
       run: |
@@ -33,7 +39,7 @@ jobs:
 
     - name: Upload artifact on failure
       if: failure()
-      uses: actions/upload-artifact@v4   # 👈 核心修复：升级到 v4
+      uses: actions/upload-artifact@v4
       with:
         name: error-screenshot
         path: error_screenshot.png
