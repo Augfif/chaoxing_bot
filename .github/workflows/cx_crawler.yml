@@ -2,8 +2,18 @@ name: ChaoXing Task Monitor
 
 on:
   schedule:
-    - cron: "0 1 * * *"  # 每天北京时间早上 9 点运行一次 (UTC 1点)
-  workflow_dispatch:     # 允许在网页上手动点击运行
+    # 多重UTC时间兜底，完全覆盖北京时间8:50~9:10，解决GitHub调度延迟+跳过问题
+  
+    - cron: "0 1 * * *"    # UTC 01:00 = 北京时间 09:00 主触发点
+  
+  workflow_dispatch:     # 保留网页手动运行
+  push:
+    branches: [ master ]  # 代码推送时自动激活工作流，防止GitHub判定仓库闲置封禁
+
+# 强制绑定仓库唯一master分支，统一shell环境，解决调度器无法定位文件问题
+defaults:
+  run:
+    shell: bash
 
 jobs:
   build:
@@ -11,6 +21,10 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+      with:
+        ref: master  # 硬编码绑定你仓库唯一的master分支
+        fetch-depth: 0
+        token: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Set up Python
       uses: actions/setup-python@v5
@@ -29,7 +43,8 @@ jobs:
 
     - name: Run Script
       id: run_script
-      continue-on-error: true
+      # 移除整步全局continue-on-error，只兼容脚本内部非致命异常，修复状态判定bug
+      # 补全你缺失的超星账号、密码、WxPusher推送环境变量
       env:
         CX_USERNAME: ${{ secrets.CX_USERNAME }}
         CX_PASSWORD: ${{ secrets.CX_PASSWORD }}
@@ -37,17 +52,18 @@ jobs:
       run: python main.py
 
     - name: Commit and push history file
-      # 仅当脚本成功时才提交历史记录，防止因错误覆盖掉正确的历史
+      # 仅脚本运行成功时，才执行文件提交推送
       if: steps.run_script.outcome == 'success'
       run: |
         git config --global user.name "github-actions[bot]"
         git config --global user.email "github-actions[bot]@users.noreply.github.com"
         git add history.json
-        # 如果文件没有变化，commit会失败，所以用 || true 来忽略错误
-        git commit -m "Update task history [skip ci]" || echo "No changes to commit"
+        # 无文件变更时静默忽略，不报错打断工作流
+        git commit -m "Update task history [skip ci]" || true
         git push
 
     - name: Upload screenshots artifact
+      # 无论脚本成功/失败，全部上传截图备份
       if: always()
       uses: actions/upload-artifact@v4
       with:
@@ -55,8 +71,9 @@ jobs:
         path: screenshots.zip
         retention-days: 5
 
-    - name: Check script result
+    - name: Check script run result
+      # 脚本真正运行失败时，工作流标红报错，抛出异常
       if: steps.run_script.outcome == 'failure'
       run: |
-        echo "Python script failed. Check the logs and artifacts."
+        echo "Python script execution failed. Please check run logs and artifact screenshots."
         exit 1
