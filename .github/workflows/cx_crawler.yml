@@ -2,9 +2,9 @@ name: ChaoXing Task Monitor
 
 on:
   schedule:
-    # 多重UTC时间兜底，完全覆盖北京时间8:50~9:10，解决GitHub调度延迟+跳过问题
+    
   
-    - cron: "0 1 * * *"    # UTC 01:00 = 北京时间 09:00 主触发点
+  - cron: '0 * * * *'
   
   workflow_dispatch:     # 保留网页手动运行
   push:
