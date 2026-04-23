@@ -17,11 +17,11 @@ from selenium.common.exceptions import TimeoutException, NoSuchElementException
 USERNAME = os.environ.get("CX_USERNAME")
 PASSWORD = os.environ.get("CX_PASSWORD")
 WXPUSHER_SPT = os.environ.get("WXPUSHER_SPT")
-# 你的服务器接收数据的 API 地址（建议配置在 GitHub Secrets 中）
+# 服务器接收数据的 API 地址（建议配置在 GitHub Secrets 中）
 MY_SERVER_API = os.environ.get("MY_SERVER_API", "http://你的服务器IP:端口/api/receive_task")
 
 
-# 🎯 监控终点课程关键字：抓完这门课就停止，如果不需要则设置为空字符串 ""
+#  监控终点课程关键字：抓完这门课就停止，如果不需要则设置为空字符串 ""
 STOP_COURSE_NAME = "数据库系统原理"
 HISTORY_FILE = "history.json"
 
