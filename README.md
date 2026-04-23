@@ -30,8 +30,9 @@ https://augfif.github.io/task-board/
 
 ### 📱 微信推送实际效果
 任务触发提醒条件时，自动发送精美格式化卡片消息至个人微信，实时接收通知。
-<img src="https://github.com/Augfif/chaoxing_bot/blob/master/picture/phone.png?raw=true" width="300" alt="手机界面展示" />
-
+<div align="center">
+  <img src="https://github.com/Augfif/chaoxing_bot/blob/master/picture/phone.png?raw=true" width="300" alt="手机界面展示" />
+</div>
 
 ## 🚀 部署指南 
 
