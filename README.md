@@ -2,7 +2,7 @@
 
 基于 Python + Selenium + GitHub Actions 构建的**自动监控学习通作业、考试任务**
 
-<small>新增 / 推送到自己的服务器（尚未完成...）</small>
+>新增 / 推送到自己的服务器（尚未完成...）
 
 ## ✨  功能特点
 
@@ -13,7 +13,7 @@
   - **Plan B (兜底防御)**：若私人服务器宕机或超时无响应，系统立即无缝降级，自动生成 HTML 看板并调用 WxPusher(需下载软件或在微信额外配置)。
 - ☁️ **云端全自动运行**：绑定 GitHub Actions，利用定时任务 (Cron) 每小时执行一次。无需自备服务器或本地常驻电脑。
 - 🧹 **智能数据清洗**：剔除超星平台冗余的英文词汇，只显示关键信息
-- 📌 **支持课程截止**: 当前仅支持在代码中修改(详见## ⚙️ 进阶配置)，后续尝试解耦。
+- 📌 **支持课程截止**: 当前仅支持在代码中修改(详见`进阶配置`)，后续尝试解耦。
 
 ## 🚀 部署指南 
 
@@ -23,7 +23,20 @@
 - （可选）一台用于接收 JSON 数据的云服务器/软路由。
 
 ### 2. Fork 本仓库
-点击右上角的 `Fork` 按钮，将本项目复制到你的个人账户下。
+<details>
+<summary><strong>点击查看如何fork项目</strong></summary>
+<img src="https://github.com/Numbersf/Action-Build/blob/SukiSU-Ultra/pic/make.gif" width="500"/>
+<summary>请注意，如果你想使用其他分支管理器项目，请在fork时关闭“仅复制SukiSU Ultra分支”</summary>
+</details>
+ 
+<details>
+<summary><strong>点击查看如何同步fork后的项目到最新</strong></summary>
+<p>
+  <img src="https://github.com/Numbersf/Action-Build/blob/SukiSU-Ultra/pic/syncfork.png" width="150"/>
+  <img src="https://github.com/Numbersf/Action-Build/blob/SukiSU-Ultra/pic/syncfork(2).png" width="150"/>
+</p>
+<summary>请及时同步!某些更新可能会导致旧版失效报错!如果同步后依旧运行失败请删除并重新fork!完成以上步骤后仍有问题再反馈提交issue</summary>
+</details>
 
 ### 3. 配置仓库权限 (重要)
 进入你的仓库：
