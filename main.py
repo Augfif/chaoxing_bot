@@ -17,40 +17,36 @@ from selenium.common.exceptions import TimeoutException, NoSuchElementException
 USERNAME = os.environ.get("CX_USERNAME")
 PASSWORD = os.environ.get("CX_PASSWORD")
 WXPUSHER_SPT = os.environ.get("WXPUSHER_SPT")
+# 你的服务器接收数据的 API 地址（建议配置在 GitHub Secrets 中）
+MY_SERVER_API = os.environ.get("MY_SERVER_API", "http://你的服务器IP:端口/api/receive_task")
+
 
 # 🎯 监控终点课程关键字：抓完这门课就停止，如果不需要则设置为空字符串 ""
 STOP_COURSE_NAME = "数据库系统原理"
 HISTORY_FILE = "history.json"
+
+# ====================== 核心正则规则 ======================
+# 规则：删除特定状态词、通用英文，但保留时间单位(hour/minute)和特定技术词(C++/HTML等)
+# 核心语法 [a-zA-Z]+(?!hour|minutes) 是负向先行断言：匹配所有英文字母单词，但是排除 hour、minutes
+TASK_CLEANUP_PATTERN = re.compile(
+    r'\b(To be|Taken|Submitted|marked|Analysis|Completed|Done|Record|Intelligence|reviewed|Only|study|through|APP|exam|task|points|left|expired|finished|over|end)\b'
+    r'|[a-zA-Z]+(?!hour|minutes)'
+    r'|\s+%',
+    re.IGNORECASE
+)
 
 # ===================== 数据清洗与提取 =====================
 def parse_task_info(raw_text):
     """
     清洗数据：提取标题和时间/状态
     """
-    # 规则：删除特定状态词、通用英文，但保留时间单位(hour/minute)和特定技术词(C++/HTML等)
-    # 1. 替换时间单位为中文
-    text = raw_text.lower().replace("hour", "小时").replace("minutes", "分钟").replace("minute", "分钟").replace("left", "剩余")
+    # 1. 执行正则替换
+    text = TASK_CLEANUP_PATTERN.sub('', raw_text)
 
-    # 2. 定义要删除的特定单词列表
-    words_to_remove = [
-        'to be taken', 'to be submitted', 'to be marked', 'analysis', 'completed', 'done',
-        'record', 'intelligence', 'reviewed', 'only', 'study', 'through', 'app',
-        'exam', 'task', 'points', 'expired'
-    ]
-    # 3. 构建正则表达式，匹配要删除的单词或通用英文单词
-    # 匹配要删除的单词（作为独立单词）
-    pattern_remove = r'\b(' + '|'.join(words_to_remove) + r')\b'
-    # 匹配通用英文单词（排除包含数字、+、-的词，以保护C++等）
-    pattern_general_english = r'\b[a-zA-Z][a-zA-Z-]*\b(?![+%])'
-
-    # 4. 执行删除
-    text = re.sub(pattern_remove, '', text, flags=re.IGNORECASE)
-    text = re.sub(pattern_general_english, '', text)
-
-    # 5. 清理多余的空格、空括号和空行
+    # 2. 清理多余连续空格、制表符、空行，排版美观
+    text = re.sub(r'[ \t]+', ' ', text)   # 多个空格缩成一个
     text = re.sub(r'\(\s*\)', '', text) # 删除空括号
-    text = re.sub(r'[ \t]+', ' ', text) # 合并多个空格
-    text = re.sub(r'(\n\s*)+', '\n', text).strip() # 删除多余空行
+    text = re.sub(r'\n+', '\n', text).strip() # 删除多余空行
 
     lines = [line.strip() for line in text.split('\n') if line.strip()]
     if not lines:
@@ -59,9 +55,28 @@ def parse_task_info(raw_text):
     title = lines[0]
     time_str = "未获取到时间"
     if len(lines) > 1:
-        time_str = lines[1]
+        # 转换常见单位
+        raw_time = lines[1].lower().replace("hour", "小时").replace("minutes", "分钟").replace("minute", "分钟")
+        time_str = re.sub(r'[a-z]', '', raw_time).strip()
 
     return {"title": title, "time": time_str}
+
+def get_hours_left(time_str):
+    """从 '剩余 5 小时 30 分钟' 或 '剩余 1 天' 中提取剩余总小时数"""
+    hours = 0
+    h_match = re.search(r'(\d+)\s*小时', time_str)
+    d_match = re.search(r'(\d+)\s*天', time_str)
+
+    if d_match:
+        hours += int(d_match.group(1)) * 24
+    if h_match:
+        hours += int(h_match.group(1))
+
+    # 如果只有分钟没有小时，算作 0.5 小时
+    if not h_match and not d_match and '分钟' in time_str:
+        return 0.5
+
+    return hours if (hours > 0 or '分钟' in time_str) else 9999 # 解析失败返回超大值
 
 # ===================== 历史记录管理 =====================
 def load_history():
@@ -128,7 +143,23 @@ def build_html_message(tasks_summary):
     html += "</div>"
     return html if has_tasks else None
 
-# ===================== 推送逻辑 (WxPusher) =====================
+# ===================== 推送逻辑 =====================
+def push_to_server(tasks_summary):
+    if not MY_SERVER_API or MY_SERVER_API == "http://你的服务器IP:端口/api/receive_task":
+        return False
+    try:
+        # 设置 timeout 为 5 秒，防止 GitHub Action 卡死
+        res = requests.post(MY_SERVER_API, json=tasks_summary, timeout=5)
+        if res.status_code == 200:
+            print("✅ 成功推送到私人服务器接管")
+            return True
+        else:
+            print(f"⚠️ 服务器返回异常状态码: {res.status_code}")
+            return False
+    except requests.exceptions.RequestException as e:
+        print(f"❌ 无法连接私人服务器 (宕机或超时): {e}")
+        return False
+
 def push_to_wx(text):
     if not WXPUSHER_SPT:
         print("⚠️ 未配置 WxPusher SPT，跳过推送。")
@@ -167,8 +198,11 @@ def setup_driver() -> WebDriver:
     return driver
 
 def save_screenshot_for_analysis(driver: WebDriver, course_name: str, task_type: str):
+    # 确保截图目录存在
+    if not os.path.exists('screenshots'):
+        os.makedirs('screenshots')
     safe_course_name = "".join(c for c in course_name if c.isalnum())
-    filename = f"analysis_{safe_course_name}_{task_type}.png"
+    filename = f"screenshots/analysis_{safe_course_name}_{task_type}.png"
     try:
         driver.save_screenshot(filename)
         print(f"📸 {task_type}页面未找到任何条目或出错，已截图保存为 {filename}")
@@ -233,7 +267,8 @@ def main():
                 try:
                     driver.switch_to.default_content()
                     wait.until(EC.element_to_be_clickable((By.XPATH, f'//a[@title="{task_type}"]'))).click()
-                    wait.until(EC.frame_to_be_available_and_switch_to_it((By.ID, f"frame_content-{'zy' if task_type == '作业' else 'ks'}")))
+                    frame_id = f"frame_content-{'zy' if task_type == '作业' else 'ks'}"
+                    wait.until(EC.frame_to_be_available_and_switch_to_it((By.ID, frame_id)))
                     items = WebDriverWait(driver, 5).until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, ".card-item, .work-item, li")))
                     for item in items:
                         parsed = parse_task_info(item.text)
@@ -247,7 +282,7 @@ def main():
                     save_screenshot_for_analysis(driver, c_name, f"{task_type}_error")
 
         # 5. 比对历史，生成待推送内容
-        print("\n🔄 正在比对历史记录，筛选新任务与更新...")
+        print("\n🔄 正在分析任务紧急程度...")
         for course_name, tasks in all_tasks_summary.items():
             new_tasks_to_push[course_name] = {"作业": [], "考试": []}
             for task_type in ["作业", "考试"]:
@@ -256,21 +291,38 @@ def main():
                     history_list = old_history.get(course_name, {}).get(task_type, [])
                     history_item = next((item for item in history_list if item['title'] == title), None)
 
+                    h_left = get_hours_left(time_str)
+
+                    # 触发条件 1：全新的任务
                     if not history_item:
                         print(f"  - [新增] {course_name} -> {task_type}: {title}")
                         new_tasks_to_push[course_name][task_type].append(task)
-                    elif time_str != "未获取到时间" and time_str != history_item['time']:
-                        print(f"  - [更新] {course_name} -> {task_type}: {title} (状态变更)")
-                        new_tasks_to_push[course_name][task_type].append(task)
 
-        # 6. 推送
-        print("\n🎉 任务提取完成，准备推送...")
-        content = build_html_message(new_tasks_to_push)
-        if content:
-            if not push_to_wx(content):
-                print("⚠️ 推送失败或未配置推送方式。")
+                    # 触发条件 2：状态发生变化（排除时间解析失败的情况）
+                    elif time_str != "未获取到时间" and time_str != history_item['time']:
+
+                        # 重点：判断是否进入 8 小时倒计时
+                        if h_left <= 8:
+                            print(f"  - 🚨 [紧急] {course_name} -> {title} (仅剩 {time_str})")
+                            new_tasks_to_push[course_name][task_type].append(task)
+                        else:
+                            print(f"  - [更新] {course_name} -> {title} (时间变动，但大于 8 小时，暂不提醒)")
+
+        # 6. 推送 (带有降级策略)
+        print("\n🎉 分析完成，准备推送...")
+        has_content = any(tasks["作业"] or tasks["考试"] for tasks in new_tasks_to_push.values())
+
+        if has_content:
+            print("🔄 策略 1：尝试连接私人服务器...")
+            server_success = push_to_server(new_tasks_to_push)
+
+            if not server_success:
+                print("🔄 策略 2：服务器不可用，启动降级策略，使用 GitHub 直接推送到微信...")
+                content = build_html_message(new_tasks_to_push)
+                if not push_to_wx(content):
+                    print("⚠️ 降级推送也失败了。")
         else:
-            print("✅ 无新增或更新的任务，无需推送。")
+            print("✅ 当前无紧急或新增任务，无需打扰。")
 
     except Exception as e:
         print(f"\n❌ 脚本主流程运行异常: {e}")
@@ -288,12 +340,17 @@ def main():
         save_history(all_tasks_summary)
         print("📦 正在打包所有截图...")
         try:
-            with zipfile.ZipFile('screenshots.zip', 'w') as zf:
-                for file in os.listdir('.'):
-                    if file.endswith('.png'):
-                        zf.write(file)
-                        os.remove(file)
-            print("✅ 截图已打包至 screenshots.zip")
+            # 检查截图目录是否存在
+            if os.path.exists('screenshots') and os.listdir('screenshots'):
+                with zipfile.ZipFile('screenshots.zip', 'w') as zf:
+                    for file in os.listdir('screenshots'):
+                        if file.endswith('.png'):
+                            file_path = os.path.join('screenshots', file)
+                            zf.write(file_path, file) # 写入 zip 时不带父目录
+                            os.remove(file_path)
+                print("✅ 截图已打包至 screenshots.zip")
+            else:
+                print("ℹ️ 没有需要打包的截图。")
         except Exception as e:
             print(f"❌ 打包截图失败: {e}")
 
