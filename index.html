@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>智能课表概览 - 动态倒计时版</title>
+  <style>
+    /* ========================================================
+       1. 设计系统 Tokens (CSS 变量)
+       ======================================================== */
+    :root {
+      /* 文字颜色 */
+      --theme_text-primary: #181d26;
+      --theme_text-weak: rgba(4, 14, 32, 0.69);
+      
+      /* 交互色与状态色 */
+      --theme_blue: #1b61c9;
+      --theme_danger-text: #b91c1c;
+      --theme_danger-bg: #fee2e2;
+      --theme_success-text: #006400;
+      --theme_success-bg: #e6f4e6;
+      --theme_warning-text: #92400e;
+      --theme_warning-bg: #fef3c7;
+      
+      /* 表面与边框 */
+      --theme_surface: #ffffff;
+      --theme_surface-light: #f8fafc;
+      --theme_surface-hover: #fbfcfe;
+      --theme_border: #e0e2e6;
+      
+      /* 阴影规范 */
+      --theme_shadow-blue: rgba(0,0,0,0.32) 0px 0px 1px, 
+                           rgba(0,0,0,0.08) 0px 0px 2px, 
+                           rgba(45,127,249,0.28) 0px 1px 3px;
+      --theme_shadow-soft: 0 4px 12px rgba(15,48,106,0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--theme_surface-light);
+      padding: 40px 20px;
+      font-family: -apple-system, system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      color: var(--theme_text-primary);
+      line-height: 1.5;
+    }
+
+    /* ========================================================
+       2. 基础布局与组件样式 (桌面端)
+       ======================================================== */
+    .page-header {
+      max-width: 1000px;
+      margin: 0 auto 24px auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+    }
+
+    .page-title {
+      font-size: 32px;
+      font-weight: 600;
+      letter-spacing: 0.2px;
+    }
+
+    .airtable-container {
+      background: var(--theme_surface);
+      border: 1px solid var(--theme_border);
+      border-radius: 16px;
+      box-shadow: var(--theme_shadow-blue);
+      max-width: 1000px;
+      margin: 0 auto;
+    }
+
+    .table-scroll-wrapper {
+      width: 100%;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      border-radius: 16px;
+    }
+
+    .airtable-table {
+      width: 100%;
+      min-width: 800px; 
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+
+    .airtable-table th {
+      background-color: var(--theme_surface-light);
+      color: var(--theme_text-weak);
+      font-size: 13px;
+      font-weight: 600;
+      padding: 16px 24px;
+      text-align: left;
+      border-bottom: 1px solid var(--theme_border);
+      letter-spacing: 0.1px;
+      white-space: nowrap;
+    }
+
+    .airtable-table td {
+      padding: 20px 24px;
+      border-bottom: 1px solid var(--theme_border);
+      vertical-align: top;
+    }
+
+    .airtable-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .course-name {
+      font-size: 16px;
+      font-weight: 600;
+      line-height: 1.4;
+      letter-spacing: 0.12px;
+    }
+
+    /* 任务卡片样式 */
+    .task-card {
+      background: var(--theme_surface);
+      border: 1px solid var(--theme_border);
+      border-radius: 12px;
+      padding: 12px 16px;
+      margin-bottom: 12px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+      transition: all 0.2s ease;
+      cursor: pointer;
+    }
+
+    .task-card:last-child {
+      margin-bottom: 0;
+    }
+
+    .task-card:hover {
+      border-color: var(--theme_blue);
+      box-shadow: var(--theme_shadow-soft);
+      transform: translateY(-2px);
+    }
+
+    /* 文本截断防爆裂 */
+    .task-title {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* 倒计时标签基础样式 */
+    .time-left {
+      display: inline-flex;
+      align-items: center;
+      font-size: 12px;
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-weight: 500;
+      letter-spacing: 0.08px;
+      /* 默认显示为中性色，将由 JS 动态覆盖 */
+      color: var(--theme_text-weak);
+      background: var(--theme_surface-light);
+    }
+
+    .task-meta {
+      font-size: 12px;
+      color: var(--theme_text-weak);
+      margin-top: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .empty-slot {
+      height: 40px;
+      background: var(--theme_surface-light);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px dashed var(--theme_border);
+      color: var(--theme_text-weak);
+      font-size: 12px;
+    }
+
+    .airtable-table tbody tr:hover td {
+      background-color: var(--theme_surface-hover);
+    }
+
+    /* ========================================================
+       3. 移动端自适应逻辑 (卡片化重组)
+       ======================================================== */
+    @media (max-width: 768px) {
+      body {
+        padding: 20px 12px;
+      }
+      
+      .page-title {
+        font-size: 24px;
+      }
+
+      .airtable-container {
+        border: none;
+        box-shadow: none;
+        background: transparent;
+      }
+
+      .table-scroll-wrapper {
+        overflow: visible;
+      }
+
+      .airtable-table {
+        min-width: 100%;
+        display: block;
+      }
+
+      .airtable-table thead {
+        display: none; 
+      }
+
+      .airtable-table tbody {
+        display: block;
+      }
+
+      .airtable-table tr {
+        display: flex;
+        flex-direction: column;
+        background: var(--theme_surface);
+        border: 1px solid var(--theme_border);
+        border-radius: 16px;
+        margin-bottom: 20px;
+        box-shadow: var(--theme_shadow-blue);
+        overflow: hidden;
+      }
+
+      .airtable-table td {
+        display: block;
+        width: 100% !important;
+        padding: 16px;
+        border-bottom: 1px dashed var(--theme_border);
+      }
+
+      .airtable-table tr td:last-child {
+        border-bottom: none;
+      }
+
+      .airtable-table td.course-name {
+        background-color: var(--theme_surface-light);
+        font-size: 18px;
+        border-bottom: 1px solid var(--theme_border);
+        padding: 16px;
+      }
+
+      .airtable-table td[data-label]::before {
+        content: attr(data-label);
+        display: block;
+        font-size: 13px;
+        color: var(--theme_text-weak);
+        margin-bottom: 12px;
+        font-weight: 600;
+        letter-spacing: 0.1px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="page-header">
+    <h1 class="page-title">超星作业考试信息</h1>
+  </div>
+
+  <div class="airtable-container">
+    <div class="table-scroll-wrapper">
+      <table class="airtable-table">
+        <colgroup>
+          <col style="width: 25%;">
+          <col style="width: 37.5%;">
+          <col style="width: 37.5%;">
+        </colgroup>
+        <thead>
+          <tr>
+            <th>所属课程</th>
+            <th>待办作业 (自动倒计时)</th>
+            <th>待考考试 (自动倒计时)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="course-name">人工智能导论</td>
+            <td data-label="待办作业">
+              <div class="task-card">
+                <div class="task-title">基于大语言模型的智能体创新设计与实现报告</div>
+                <div class="time-left" data-deadline="2026-04-28T23:59:00">加载中...</div>
+                <div class="task-meta">需提交 GitHub 托管链接</div>
+              </div>
+              <div class="task-card">
+                <div class="task-title">第四次实验：模型微调实践</div>
+                <div class="time-left" data-deadline="2026-05-15T23:59:00">加载中...</div>
+                <div class="task-meta">OJ 平台自动评测</div>
+              </div>
+            </td>
+            <td data-label="待考考试">
+              <div class="task-card">
+                <div class="task-title">期中线上闭卷测试</div>
+                <div class="time-left" data-deadline="2026-04-24T18:00:00">加载中...</div>
+                <div class="task-meta">考试时长：120分钟</div>
+              </div>
+            </td>
+          </tr>
+
+          <tr>
+            <td class="course-name">计算机网络</td>
+            <td data-label="待办作业">
+              <div class="empty-slot">暂无待办事项</div>
+            </td>
+            <td data-label="待考考试">
+              <div class="task-card">
+                <div class="task-title">第 1-5 章综合测验</div>
+                <div class="time-left" data-deadline="2026-05-05T12:00:00">加载中...</div>
+                <div class="task-meta">已完成 90% 任务点</div>
+              </div>
+            </td>
+          </tr>
+
+          <tr>
+            <td class="course-name">数据结构与算法设计</td>
+            <td data-label="待办作业">
+              <div class="task-card">
+                <div class="task-title">图论综合编程练习题 (Java/Python)</div>
+                <div class="time-left" data-deadline="2026-04-10T23:59:00">加载中...</div>
+                <div class="task-meta">包含 5 道图论变体</div>
+              </div>
+            </td>
+            <td data-label="待考考试">
+              <div class="empty-slot">暂无考试安排</div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    function updateCountdowns() {
+      const elements = document.querySelectorAll('.time-left[data-deadline]');
+      const now = new Date();
+
+      elements.forEach(el => {
+        const deadline = new Date(el.getAttribute('data-deadline'));
+        const diff = deadline - now;
+
+        // 获取根节点 CSS 变量颜色
+        const rootStyle = getComputedStyle(document.documentElement);
+        const dangerBg = rootStyle.getPropertyValue('--theme_danger-bg').trim();
+        const dangerText = rootStyle.getPropertyValue('--theme_danger-text').trim();
+        const warningBg = rootStyle.getPropertyValue('--theme_warning-bg').trim();
+        const warningText = rootStyle.getPropertyValue('--theme_warning-text').trim();
+        const successBg = rootStyle.getPropertyValue('--theme_success-bg').trim();
+        const successText = rootStyle.getPropertyValue('--theme_success-text').trim();
+
+        // 状态 1：已截止
+        if (diff <= 0) {
+          el.innerText = '已截止 / 已结束';
+          el.style.backgroundColor = '#f1f5f9';
+          el.style.color = '#64748b';
+          return;
+        }
+
+        // 计算剩余时间
+        const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+        const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+
+        // 状态 2：剩余时间充足 (大于 7 天)
+        if (days >= 7) {
+          el.innerText = `剩余 ${days} 天`;
+          el.style.backgroundColor = successBg;
+          el.style.color = successText;
+        } 
+        // 状态 3：中等紧急 (2 到 6 天)
+        else if (days >= 2 && days < 7) {
+          el.innerText = `剩余 ${days} 天 ${hours} 小时`;
+          el.style.backgroundColor = warningBg;
+          el.style.color = warningText;
+        } 
+        // 状态 4：极度紧急 (不足 2 天)
+        else {
+          if (days === 1) {
+            el.innerText = `剩余 1 天 ${hours} 小时`;
+          } else {
+            el.innerText = `仅剩 ${hours} 小时 ${mins} 分钟`;
+          }
+          el.style.backgroundColor = dangerBg;
+          el.style.color = dangerText;
+        }
+      });
+    }
+
+    // 页面加载完成后立即执行一次
+    document.addEventListener('DOMContentLoaded', () => {
+      updateCountdowns();
+      // 随后每分钟刷新一次倒计时
+      setInterval(updateCountdowns, 60000);
+    });
+  </script>
+
+</body>
+</html>
