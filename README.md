@@ -7,7 +7,7 @@
 项目已静态部署 **GitHub Pages**，打开链接即可全局查看所有课程任务、截止倒计时、紧急任务标记。
 
 🔗 **在线访问地址**：
-https://Auggifi.github.io/chaoxing_bot/
+https://augfif.github.io/task-board/
 
 网页展示：卡片式布局、课程分类、剩余时间倒计时、紧急任务高亮标红、界面简洁清爽。
 
@@ -30,7 +30,9 @@ https://Auggifi.github.io/chaoxing_bot/
 
 ### 📱 微信推送实际效果
 任务触发提醒条件时，自动发送精美格式化卡片消息至个人微信，实时接收通知。
-![微信推送手机端展示](https://github.com/Augfif/chaoxing_bot/blob/master/picture/phone.png)
+<p align="center">
+  <img src="https://github.com/Auggifi/chaoxing_bot/blob/master/picture/phone.png" width="600" alt="微信推送手机端展示">
+</p>
 
 ## 🚀 部署指南 
 
