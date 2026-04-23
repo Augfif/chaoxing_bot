@@ -3,6 +3,17 @@
 基于 Python + Selenium + GitHub Actions 构建的**自动监控学习通作业、考试任务**
 
 
+## 🖥️ 在线可视化任务看板
+项目已静态部署 **GitHub Pages**，打开链接即可全局查看所有课程任务、截止倒计时、紧急任务标记。
+
+🔗 **在线访问地址**：
+https://Auggifi.github.io/chaoxing_bot/
+
+网页展示：卡片式布局、课程分类、剩余时间倒计时、紧急任务高亮标红、界面简洁清爽。
+
+![网页看板展示](https://github.com/Augfif/chaoxing_bot/blob/master/picture/img.png)
+
+---
 
 >新增 / 推送到自己的服务器（正在填坑中）
 
@@ -17,6 +28,10 @@
 - 🧹 **智能数据清洗**：剔除超星平台冗余的英文词汇，只显示关键信息
 - 📌 **支持课程截止**: 当前仅支持在代码中修改(详见`进阶配置`)，后续尝试解耦。
 
+### 📱 微信推送实际效果
+任务触发提醒条件时，自动发送精美格式化卡片消息至个人微信，实时接收通知。
+![微信推送手机端展示](https://github.com/Augfif/chaoxing_bot/blob/master/picture/phone.png)
+
 ## 🚀 部署指南 
 
 ### 1. 准备工作
@@ -27,15 +42,15 @@
 ### 2. Fork 本仓库
 <details>
 <summary><strong>点击查看如何fork项目</strong></summary>
-<img src="https://github.com/Numbersf/Action-Build/blob/SukiSU-Ultra/pic/make.gif" width="500"/>
+<img src="https://github.com/Augfif/chaoxing_bot/blob/master/picture/make.gif" width="500"/>
 <summary>请注意，如果你想使用其他分支管理器项目，请在fork时关闭“仅复制SukiSU Ultra分支”</summary>
 </details>
  
 <details>
 <summary><strong>点击查看如何同步fork后的项目到最新</strong></summary>
 <p>
-  <img src="https://github.com/Numbersf/Action-Build/blob/SukiSU-Ultra/pic/syncfork.png" width="150"/>
-  <img src="https://github.com/Numbersf/Action-Build/blob/SukiSU-Ultra/pic/syncfork(2).png" width="150"/>
+  <img src="https://github.com/Augfif/chaoxing_bot/blob/master/picture/syncfork.png" width="150"/>
+  <img src="https://github.com/Augfif/chaoxing_bot/blob/master/picture/syncfork(2).png" width="150"/>
 </p>
 <summary>请及时同步!某些更新可能会导致旧版失效报错!如果同步后依旧运行失败请删除并重新fork!完成以上步骤后仍有问题再反馈提交issue</summary>
 </details>
