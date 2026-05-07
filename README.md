@@ -45,7 +45,6 @@ https://augfif.github.io/task-board/
 <details>
 <summary><strong>点击查看如何fork项目</strong></summary>
 <img src="https://github.com/Augfif/chaoxing_bot/blob/master/picture/make.gif" width="500"/>
-<summary>请注意，如果你想使用其他分支管理器项目，请在fork时关闭“仅复制SukiSU Ultra分支”</summary>
 </details>
  
 <details>
