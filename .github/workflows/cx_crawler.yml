@@ -1,10 +1,10 @@
 name: ChaoXing Task Monitor
 
 on:
-  schedule:
+#  schedule:
     
   
-  - cron: '0 * * * *'
+#  - cron: '0 * * * *'
   
   workflow_dispatch:     # 保留网页手动运行
   push:
