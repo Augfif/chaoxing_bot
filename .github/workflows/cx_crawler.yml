@@ -49,6 +49,8 @@ jobs:
         CX_USERNAME: ${{ secrets.CX_USERNAME }}
         CX_PASSWORD: ${{ secrets.CX_PASSWORD }}
         WXPUSHER_SPT: ${{ secrets.WXPUSHER_SPT }}
+        MY_SERVER_API: ${{ secrets.MY_SERVER_API }}
+        STOP_COURSE_NAME: ${{ vars.STOP_COURSE_NAME || '数据库系统原理' }}
       run: python main.py
 
     - name: Commit and push history file
