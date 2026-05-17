@@ -1,17 +1,17 @@
 import os
-import time
 import sys
 import requests
 import re
 import zipfile
 import json
+import html as html_utils
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.remote.webdriver import WebDriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException, NoSuchElementException
+from selenium.common.exceptions import TimeoutException
 
 # ===================== 读取环境变量与配置 =====================
 USERNAME = os.environ.get("CX_USERNAME")
@@ -21,16 +21,17 @@ WXPUSHER_SPT = os.environ.get("WXPUSHER_SPT")
 MY_SERVER_API = os.environ.get("MY_SERVER_API", "http://你的服务器IP:端口/api/receive_task")
 
 
-#  监控终点课程关键字：抓完这门课就停止，如果不需要则设置为空字符串 ""
-STOP_COURSE_NAME = "数据库系统原理"
+# 监控终点课程关键字：抓完这门课就停止，如果不需要则设置为空字符串 ""
+STOP_COURSE_NAME = os.environ.get("STOP_COURSE_NAME", "数据库系统原理")
 HISTORY_FILE = "history.json"
+REQUEST_TIMEOUT = 8
 
 # ====================== 核心正则规则 ======================
 # 规则：删除特定状态词、通用英文，但保留时间单位(hour/minute)和特定技术词(C++/HTML等)
-# 核心语法 [a-zA-Z]+(?!hour|minutes) 是负向先行断言：匹配所有英文字母单词，但是排除 hour、minutes
+# 核心语法 (?!hours?|minutes?) 是负向先行断言：匹配普通英文单词，但是保留 hour/minute 时间单位
 TASK_CLEANUP_PATTERN = re.compile(
     r'\b(To be|Taken|Submitted|marked|Analysis|Completed|Done|Record|Intelligence|reviewed|Only|study|through|APP|exam|task|points|left|expired|finished|over|end)\b'
-    r'|[a-zA-Z]+(?!hour|minutes)'
+    r'|\b(?!hours?\b|minutes?\b|minute\b)[a-zA-Z]+\b'
     r'|\s+%',
     re.IGNORECASE
 )
@@ -55,8 +56,12 @@ def parse_task_info(raw_text):
     title = lines[0]
     time_str = "未获取到时间"
     if len(lines) > 1:
-        # 转换常见单位
-        raw_time = lines[1].lower().replace("hour", "小时").replace("minutes", "分钟").replace("minute", "分钟")
+        # 转换常见单位，并兼容 hour/minute 被正则拆散后的 h / m
+        raw_time = lines[1].lower()
+        raw_time = raw_time.replace("hours", "小时").replace("hour", "小时")
+        raw_time = raw_time.replace("minutes", "分钟").replace("minute", "分钟")
+        raw_time = re.sub(r'(\d+)\s*h\b', r'\1小时', raw_time)
+        raw_time = re.sub(r'(\d+)\s*m\b', r'\1分钟', raw_time)
         time_str = re.sub(r'[a-z]', '', raw_time).strip()
 
     return {"title": title, "time": time_str}
@@ -115,27 +120,32 @@ def build_html_message(tasks_summary):
             continue
 
         has_tasks = True
+        safe_course = html_utils.escape(course)
         emoji = "💻" if any(kw in course for kw in ["数据", "算法", "计算", "编程", "程序", "软件", "系统"]) else "📚"
 
         html += f"""
         <div style="background: #ffffff; border: 1px solid #e0e2e6; border-radius: 12px; margin-bottom: 16px; overflow: hidden; box-shadow: 0 2px 6px rgba(0,0,0,0.05);">
             <div style="background-color: #f8fafc; padding: 12px 15px; font-size: 16px; font-weight: bold; border-bottom: 1px solid #e0e2e6; color: #1b61c9;">
-                {emoji} {course}
+                {emoji} {safe_course}
             </div>
             <div style="padding: 15px;">
         """
         for ks in tasks["考试"]:
+            safe_title = html_utils.escape(ks.get('title', '未知考试'))
+            safe_time = html_utils.escape(ks.get('time', '未获取到时间'))
             html += f"""
             <div style="border: 1px dashed #b91c1c; border-radius: 8px; padding: 10px; margin-bottom: 10px; background-color: #fff5f5;">
-                <div style="font-size: 14px; font-weight: bold; color: #b91c1c;">[考试] {ks['title']}</div>
-                <div style="font-size: 12px; color: #b91c1c; margin-top: 4px;">状态：{ks['time']}</div>
+                <div style="font-size: 14px; font-weight: bold; color: #b91c1c;">[考试] {safe_title}</div>
+                <div style="font-size: 12px; color: #b91c1c; margin-top: 4px;">状态：{safe_time}</div>
             </div>
             """
         for zy in tasks["作业"]:
+            safe_title = html_utils.escape(zy.get('title', '未知作业'))
+            safe_time = html_utils.escape(zy.get('time', '未获取到时间'))
             html += f"""
             <div style="border: 1px dashed #16a34a; border-radius: 8px; padding: 10px; margin-bottom: 10px; background-color: #f0fdf4;">
-                <div style="font-size: 14px; font-weight: bold; color: #16a34a;">[作业] {zy['title']}</div>
-                <div style="font-size: 12px; color: #16a34a; margin-top: 4px;">状态：{zy['time']}</div>
+                <div style="font-size: 14px; font-weight: bold; color: #16a34a;">[作业] {safe_title}</div>
+                <div style="font-size: 12px; color: #16a34a; margin-top: 4px;">状态：{safe_time}</div>
             </div>
             """
         html += "</div></div>"
@@ -148,8 +158,8 @@ def push_to_server(tasks_summary):
     if not MY_SERVER_API or MY_SERVER_API == "http://你的服务器IP:端口/api/receive_task":
         return False
     try:
-        # 设置 timeout 为 5 秒，防止 GitHub Action 卡死
-        res = requests.post(MY_SERVER_API, json=tasks_summary, timeout=5)
+        # 设置 timeout，防止 GitHub Action 卡死
+        res = requests.post(MY_SERVER_API, json=tasks_summary, timeout=REQUEST_TIMEOUT)
         if res.status_code == 200:
             print("✅ 成功推送到私人服务器接管")
             return True
@@ -167,7 +177,9 @@ def push_to_wx(text):
     try:
         url = "https://wxpusher.zjiecode.com/api/send/message/simple-push"
         payload = {"content": text, "summary": "🚨 学习通任务截止提醒", "contentType": 2, "spt": WXPUSHER_SPT}
-        res = requests.post(url, json=payload).json()
+        res = requests.post(url, json=payload, timeout=REQUEST_TIMEOUT)
+        res.raise_for_status()
+        res = res.json()
         if str(res.get("code")) == "0":
             print("✅ WxPusher 推送成功")
             return True
