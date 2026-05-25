@@ -290,7 +290,7 @@ def main():
         if not course_cards:
             print("⚠️ 未能在页面上找到任何课程，请检查是否没有课程或页面结构已更改。")
             save_screenshot_for_analysis(driver, "AllCourses", "not_found")
-        for card in course_cards:
+    for card in course_cards:
     try:
         name = card.find_element(By.CSS_SELECTOR, ".course-name").text.strip()
         link = card.find_element(By.CSS_SELECTOR, ".course-cover a").get_attribute("href")
