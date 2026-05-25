@@ -26,7 +26,7 @@ https://augfif.github.io/task-board/
   - **Plan B (兜底防御)**：若私人服务器宕机或超时无响应，系统立即无缝降级，自动生成 HTML 看板并调用 WxPusher(需下载软件或在微信额外配置)。
 - ☁️ **云端全自动运行**：绑定 GitHub Actions，利用定时任务 (Cron) 每小时执行一次。无需自备服务器或本地常驻电脑。
 - 🧹 **智能数据清洗**：剔除超星平台冗余的英文词汇，只显示关键信息
-- 📌 **支持课程截止**: 当前仅支持在代码中修改(详见`进阶配置`)，后续尝试解耦。
+- 📌 **支持课程过滤配置**：可通过 GitHub Secret 或本地配置文件过滤不需要监控的课程，无需再进入代码修改 `STOP_COURSE_NAME`。
 
 ### 📱 微信推送实际效果
 任务触发提醒条件时，自动发送精美格式化卡片消息至个人微信，实时接收通知。
@@ -68,8 +68,9 @@ https://augfif.github.io/task-board/
 | :--- | :---: | :--- |
 | `CX_USERNAME` | ✅ | 学习通登录手机号/账号 |
 | `CX_PASSWORD` | ✅ | 学习通登录密码 |
-| `WXPUSHER_SPT`| ✅ | WxPusher 的单播推送 Token (格式一般为 `SPT_xxxx`) |
+| `WXPUSHER_SPT`| ✅ | WxPusher 的单播推送 Token，格式一般为 `SPT_xxxx` |
 | `MY_SERVER_API`| ❌ | 你的私人服务器 Webhook 接收接口地址，若不配置则默认直接走微信推送兜底 |
+| `COURSE_CONFIG_JSON` | ❌ | 课程过滤配置，可用于跳过不想监控的课程 |
 
 ### 5. 首次激活工作流
 进入 `Actions` 标签页，在左侧选择 `ChaoXing Task Monitor`，点击右侧的 **Run workflow** 手动触发第一次运行。
@@ -77,9 +78,85 @@ https://augfif.github.io/task-board/
 
 ## ⚙️ 进阶配置
 
-在 `main.py` 顶部可以修改以下配置以适应你的需求：
-- **监控终点 **：如果你不需要遍历所有的课程，可以设置一个“终点课程”的名称关键字。爬虫扫描到该课程即停止，大幅提高脚本运行速度与成功率。
+### 课程过滤配置
 
+如果你不想监控某些课程，可以通过课程过滤配置跳过它们。  
+课程过滤支持两种方式：
+
+1. GitHub Actions 部署时，通过 `COURSE_CONFIG_JSON` Secret 配置。
+2. 本地运行时，通过 `config.json` 配置文件配置。
+
+### 使用 GitHub Secret 配置课程过滤
+
+进入仓库：
+
+`Settings` → `Secrets and variables` → `Actions` → `New repository secret`
+
+新增一个 Secret：
+
+```text
+COURSE_CONFIG_JSON
+```
+
+示例内容：
+
+```json
+{"course_filter":{"include_keywords":[],"exclude_keywords":["体育","就业指导","形势与政策"],"stop_after_keyword":""}}
+```
+
+配置说明：
+
+| 字段 | 说明 |
+| :--- | :--- |
+| `include_keywords` | 只监控课程名中包含这些关键词的课程。留空表示监控所有课程 |
+| `exclude_keywords` | 跳过课程名中包含这些关键词的课程 |
+| `stop_after_keyword` | 扫描到包含该关键词的课程后停止继续扫描。留空表示不启用 |
+
+例如课程名是：
+
+```text
+2025春 大学英语（二）
+```
+
+如果你在 `exclude_keywords` 中填写：
+
+```json
+["大学英语"]
+```
+
+该课程就会被跳过，不再参与作业和考试任务检查。
+
+### 使用本地配置文件
+
+如果你是在本地运行脚本，可以复制示例配置文件：
+
+```bash
+cp config.example.json config.json
+```
+
+然后修改 `config.json`：
+
+```json
+{
+  "course_filter": {
+    "include_keywords": [],
+    "exclude_keywords": ["体育", "就业指导"],
+    "stop_after_keyword": ""
+  }
+}
+```
+
+`config.json` 是个人配置文件，不建议提交到公开仓库。
+
+### 配置优先级
+
+脚本读取课程过滤配置的优先级如下：
+
+1. 优先读取环境变量 `COURSE_CONFIG_JSON`
+2. 如果没有环境变量，则读取本地 `config.json`
+3. 如果两者都没有，则默认监控所有课程
+
+这样可以兼容 GitHub Actions 云端部署和本地调试两种场景。
 ## 📸 运行效果与排错
 - **静默守护**：平时无任务时静默运行，一旦产生报错（如学习通界面改版），系统会自动将出错页面的截图打包为 `screenshots.zip` 上传至该次 Action 的 Artifacts 中，极大方便排查。
 - **降级日志**：你可以在 Actions 的运行日志中清晰看到 `🔄 策略 1：尝试连接私人服务器...` 与 `🔄 策略 2：服务器不可用，启动降级策略...` 的智能调度过程。
@@ -94,7 +171,7 @@ https://augfif.github.io/task-board/
 目前项目还有一些小缺点，我也列了一份 **TODO 清单**，如果你刚好会，或者想拿来练手，随时欢迎提 PR：
 
 * **[待填坑] 服务器端代码**：现在脚本可以把数据 POST 到私人服务器，但是服务器那边怎么接、怎么存、怎么推，我还没写完... 有没有大佬帮忙糊一个 FastAPI / Flask 的模板？
-* **[待优化] 课程截止解耦**：现在想要过滤掉不需要的课，还得进代码里改 `STOP_COURSE_NAME`，有点硬核。能不能改成读取一个配置文件，或者做个简单的过滤列表？
+* **[已优化] 课程过滤配置**：已支持通过 `COURSE_CONFIG_JSON` 或 `config.json` 配置课程过滤规则，无需再进入代码修改 `STOP_COURSE_NAME`。
 * **[待修复] 玄学 Bug**：如果你在跑脚本的时候遇到了报错（比如学习通又双叒叕改版了），欢迎带上 Log 截图提 Issue！
 
 **怎么参与？**
