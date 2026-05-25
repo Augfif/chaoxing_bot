@@ -281,35 +281,44 @@ def main():
         print("✅ 登录成功")
 
         # 3. 获取课程列表
+                # 3. 获取课程列表
         wait.until(EC.frame_to_be_available_and_switch_to_it((By.ID, "frame_content")))
+
         try:
-            course_cards = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "li.course")))
+            course_cards = wait.until(
+                EC.presence_of_all_elements_located((By.CSS_SELECTOR, "li.course"))
+            )
         except TimeoutException:
             print("⚠️ 未找到 'li.course' 类型的课程卡片，尝试备用查找方案...")
-            course_cards = driver.find_elements(By.XPATH, '//a[contains(@href,"courseid") or contains(@href,"mooc2-ans")]')
+            course_cards = driver.find_elements(
+                By.XPATH,
+                '//a[contains(@href,"courseid") or contains(@href,"mooc2-ans")]'
+            )
+
         if not course_cards:
             print("⚠️ 未能在页面上找到任何课程，请检查是否没有课程或页面结构已更改。")
             save_screenshot_for_analysis(driver, "AllCourses", "not_found")
-    for card in course_cards:
-    try:
-        name = card.find_element(By.CSS_SELECTOR, ".course-name").text.strip()
-        link = card.find_element(By.CSS_SELECTOR, ".course-cover a").get_attribute("href")
 
-        should_monitor, reason = should_monitor_course(name)
+        for card in course_cards:
+            try:
+                name = card.find_element(By.CSS_SELECTOR, ".course-name").text.strip()
+                link = card.find_element(By.CSS_SELECTOR, ".course-cover a").get_attribute("href")
 
-        if should_monitor:
-            all_course_link_list.append({"name": name, "url": link})
-            print(f"✅ 已加入监控课程：{name}")
-        else:
-            print(f"⏭️ 已跳过课程：{name}，原因：{reason}")
+                should_monitor, reason = should_monitor_course(name)
 
-        if STOP_COURSE_NAME and STOP_COURSE_NAME in name:
-            print(f"🛑 已识别到终点课程：{name}，停止扫描后续课程列表。")
-            break
+                if should_monitor:
+                    all_course_link_list.append({"name": name, "url": link})
+                    print(f"✅ 已加入监控课程：{name}")
+                else:
+                    print(f"⏭️ 已跳过课程：{name}，原因：{reason}")
 
-    except Exception as e:
-        print(f"⚠️ 解析某个课程卡片时出错，已跳过: {e}")
-        continue
+                if STOP_COURSE_NAME and STOP_COURSE_NAME in name:
+                    print(f"🛑 已识别到终点课程：{name}，停止扫描后续课程列表。")
+                    break
+
+            except Exception as e:
+                print(f"⚠️ 解析某个课程卡片时出错，已跳过: {e}")
+                continue
         print(f"✅ 成功获取到 {len(all_course_link_list)} 门课程。")
 
         # 4. 顺序遍历抓取
