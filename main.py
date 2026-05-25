@@ -22,7 +22,53 @@ MY_SERVER_API = os.environ.get("MY_SERVER_API", "http://你的服务器IP:端口
 
 
 #  监控终点课程关键字：抓完这门课就停止，如果不需要则设置为空字符串 ""
-STOP_COURSE_NAME = "数据库系统原理"
+CONFIG_FILE = "config.json"
+
+DEFAULT_CONFIG = {
+    "course_filter": {
+        "include_keywords": [],
+        "exclude_keywords": [],
+        "stop_after_keyword": ""
+    }
+}
+def load_config():
+    """
+    读取课程过滤配置。
+    优先级：
+    1. 环境变量 COURSE_CONFIG_JSON
+    2. 本地 config.json
+    3. 默认配置
+    """
+    env_config = os.environ.get("COURSE_CONFIG_JSON")
+
+    if env_config:
+        try:
+            print("已从环境变量 COURSE_CONFIG_JSON 读取课程过滤配置。")
+            return json.loads(env_config)
+        except json.JSONDecodeError as e:
+            print(f"COURSE_CONFIG_JSON 解析失败，将使用默认配置: {e}")
+
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                print(f"已读取配置文件 {CONFIG_FILE}。")
+                return json.load(f)
+        except (json.JSONDecodeError, IOError) as e:
+            print(f"读取 {CONFIG_FILE} 失败，将使用默认配置: {e}")
+
+    print("未找到课程过滤配置，将监控所有课程。")
+    return DEFAULT_CONFIG
+
+
+CONFIG = load_config()
+COURSE_FILTER = CONFIG.get("course_filter", {})
+
+INCLUDE_COURSE_KEYWORDS = COURSE_FILTER.get("include_keywords", [])
+EXCLUDE_COURSE_KEYWORDS = COURSE_FILTER.get("exclude_keywords", [])
+STOP_COURSE_NAME = COURSE_FILTER.get("stop_after_keyword", "")
+
+
+
 HISTORY_FILE = "history.json"
 
 # ====================== 核心正则规则 ======================
@@ -245,16 +291,25 @@ def main():
             print("⚠️ 未能在页面上找到任何课程，请检查是否没有课程或页面结构已更改。")
             save_screenshot_for_analysis(driver, "AllCourses", "not_found")
         for card in course_cards:
-            try:
-                name = card.find_element(By.CSS_SELECTOR, ".course-name").text.strip()
-                link = card.find_element(By.CSS_SELECTOR, ".course-cover a").get_attribute("href")
-                all_course_link_list.append({"name": name, "url": link})
-                if STOP_COURSE_NAME and STOP_COURSE_NAME in name:
-                    print(f"📍 已识别到终点课程：{name}，停止扫描后续课程列表。")
-                    break
-            except Exception as e:
-                print(f"⚠️ 解析某个课程卡片时出错，已跳过: {e}")
-                continue
+    try:
+        name = card.find_element(By.CSS_SELECTOR, ".course-name").text.strip()
+        link = card.find_element(By.CSS_SELECTOR, ".course-cover a").get_attribute("href")
+
+        should_monitor, reason = should_monitor_course(name)
+
+        if should_monitor:
+            all_course_link_list.append({"name": name, "url": link})
+            print(f"✅ 已加入监控课程：{name}")
+        else:
+            print(f"⏭️ 已跳过课程：{name}，原因：{reason}")
+
+        if STOP_COURSE_NAME and STOP_COURSE_NAME in name:
+            print(f"🛑 已识别到终点课程：{name}，停止扫描后续课程列表。")
+            break
+
+    except Exception as e:
+        print(f"⚠️ 解析某个课程卡片时出错，已跳过: {e}")
+        continue
         print(f"✅ 成功获取到 {len(all_course_link_list)} 门课程。")
 
         # 4. 顺序遍历抓取
