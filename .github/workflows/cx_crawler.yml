@@ -49,6 +49,7 @@ jobs:
         CX_USERNAME: ${{ secrets.CX_USERNAME }}
         CX_PASSWORD: ${{ secrets.CX_PASSWORD }}
         WXPUSHER_SPT: ${{ secrets.WXPUSHER_SPT }}
+        COURSE_CONFIG_JSON: ${{ secrets.COURSE_CONFIG_JSON }}
       run: python main.py
 
     - name: Commit and push history file

@@ -1,0 +1,7 @@
+{
+  "course_filter": {
+    "include_keywords": [],
+    "exclude_keywords": [],
+    "stop_after_keyword": ""
+  }
+}
